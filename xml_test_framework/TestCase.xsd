@@ -1,0 +1,120 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name ="Test">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="description" type="xs:string" maxOccurs="1"/>
+        <xs:choice maxOccurs="unbounded" minOccurs="1">
+          <xs:element name="start_host" type="ServiceRequest" maxOccurs="1"/>
+          <xs:element name="stop_host" type="HostRequest" maxOccurs="1"/>
+          <xs:element name="service_request" type="ServiceRequest" maxOccurs="1"/>
+          <xs:element name="host_request" type="HostRequest" maxOccurs="1"/>
+          <xs:element name="wait_for_response" type="Wait" maxOccurs="1"/>
+          <xs:element name="assert_xml_equal" type="AssertEqual" maxOccurs="1"/>
+          <xs:element name="assert_json_equal" type="AssertEqual" maxOccurs="1"/>
+          <xs:element name="assert_http_header_equal" type="AssertHeaderEqual" maxOccurs="1"/>
+          <xs:element name="assert_status_code_equal" type="AssertEqual" maxOccurs="1"/>
+          <xs:element name="assert_has_element" type="AssertHasElement" maxOccurs="1"/>
+          <xs:element name="assert_element_value_equal" type="AssertXMLEqual" maxOccurs="1"/>
+          <xs:element name="assert_attribute_value_equal" type="AssertXMLAttributeEqual" maxOccurs="1"/>
+        </xs:choice>
+        <xs:element name="cleanp">
+          <xs:complexType>
+            <xs:choice maxOccurs="unbounded" minOccurs="1">
+              <xs:element name="start_host" type="StartHost" maxOccurs="1"/>
+              <xs:element name="stop_host" type="StopHost" maxOccurs="1"/>
+              <xs:element name="service_request" type="ServiceRequest" maxOccurs="1"/>
+              <xs:element name="host_request" type="HostRequest" maxOccurs="1"/>
+              <xs:element name="wait_for_response" type="Wait" maxOccurs="1"/>
+            </xs:choice>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  
+  <xs:complexType name ="ServiceRequest">
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="alter_attribute">
+        <xs:complexType>
+          <xs:attribute name="xpath" type="xs:string"/>
+          <xs:attribute name="attribute" type="xs:string"/>
+          <xs:attribute name="value" type="xs:string"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="path" type="xs:string" />
+    <xs:attribute name="data_name" type="xs:string" use="optional"/>
+    <xs:attribute name="timeout" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name ="StartHost">
+    <xs:attribute name="port" type="xs:string"/>
+    <xs:attribute name="host_name" type="xs:string"/>
+    <xs:attribute name="server_address" type="xs:string" use="optional"/>
+  </xs:complexType>
+  
+  <xs:complexType name ="StopHost">
+    <xs:attribute name="host_name" type="xs:string"/>
+  </xs:complexType>
+  
+  <xs:complexType name ="HostRequest">
+    <xs:attribute name="path" type="xs:string"/>
+    <xs:attribute name="data_name" type="xs:string" use="optional"/>
+    <xs:attribute name="timeout" type="xs:string" use="optional"/>
+    <xs:attribute name="host_name" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name ="Wait">
+    <xs:attribute name="data_name" type="xs:string"/>
+    <xs:attribute name="wait_for_value" type="xs:int"/>
+  </xs:complexType>
+
+  <xs:complexType name ="BasicAssert">
+    <xs:attribute name="data_name" type="xs:string"/>
+    <xs:attribute name="wait_for_value" type="xs:int" use="optional"/>
+    <xs:attribute name="description" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="AssertEqual">
+    <xs:complexContent>
+      <xs:extension base="BasicAssert">
+        <xs:attribute name="expected" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="AssertHeaderEqual">
+    <xs:complexContent>
+      <xs:extension base="AssertEqual">
+        <xs:attribute name="header" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="AssertHasElement">
+    <xs:complexContent>
+      <xs:extension base="BasicAssert">
+        <xs:attribute name="xpath" type="xs:string"/>
+        <xs:attribute name="expected" type="xs:string" use="optional"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="AssertXMLEqual">
+    <xs:complexContent>
+      <xs:extension base="AssertEqual">
+        <xs:attribute name="xpath" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="AssertXMLAttributeEqual">
+    <xs:complexContent>
+      <xs:extension base="AssertXMLEqual">
+        <xs:attribute name="attribute" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  
+</xs:schema>
