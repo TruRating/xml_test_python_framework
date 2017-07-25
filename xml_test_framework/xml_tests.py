@@ -3,6 +3,7 @@ import os
 import xml.etree.ElementTree as ET
 #import lxml
 import requests
+import socket
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import SocketServer
 import threading
@@ -18,6 +19,7 @@ import array
 import ConfigParser
 import uuid
 import fnmatch
+import logging
 
 def updateSessionId() :
     config = ConfigParser.ConfigParser()
@@ -119,6 +121,27 @@ def get_subdirectories(a_dir):
     return [name for name in os.listdir(a_dir)
         if os.path.isdir(os.path.join(a_dir, name))]
 
+def get_value(in_value):
+    list = in_value.split(':')
+    if len(list) == 2:
+        data_type, value = list
+        if data_type=='path':
+            file_path = value
+            if not os.path.isabs(file_path) :
+                file_path = os.path.abspath(file_path)
+            out_value = open(file_path).read()
+        else:
+            out_value = value
+    else:
+        out_value = in_value
+    if out_value == '$session_id':
+        out_value = str(getSessionId())
+    elif out_value == '$update_session_id':
+        out_value = str(updateSessionId())
+    elif out_value == '$uuid':
+        out_value = str(uuid.uuid4())
+    return out_value
+
 class AlterAttributeHandler :
     def __init__(self,xml_root,xpath, attribute, value ):
         self.xml_root = xml_root
@@ -128,14 +151,52 @@ class AlterAttributeHandler :
     
     def run(self):
         element = self.xml_root.find(self.xpath)
-        if self.value == '$session_id':
-            element.attrib[self.attribute] = str(getSessionId())
-        elif self.value == '$update_session_id':
-            element.attrib[self.attribute] = str(updateSessionId())
-        elif self.value == '$uuid':
-            element.attrib[self.attribute] = str(uuid.uuid4())
+        element.attrib[self.attribute] = get_value(self.value) 
+
+class RawRequestHandler :
+
+    def __init__(self,element_node, path, timeout = 10, data_name='default',server="localhost",port="57777"):
+        self.element_node = element_node
+        if not os.path.isabs(path) :
+            self.path = os.path.abspath(path)
         else :
-            element.attrib[self.attribute] = self.value
+            self.path = path
+        self.timeout = timeout
+        self.data_name = data_name
+        self.server = server
+        self.port = port
+
+    def run(self):
+        print "run RawRequestHandler"
+        log= logging.getLogger( "SomeTest.testSomething" )
+        log.debug( "run RawRequestHandler" )
+        request_file = open(self.path)
+        tree = ET.parse(request_file)
+
+        iterator = self.element_node.iter()
+        iterator.next()
+        for element in iterator :
+            xml_editors[element.tag](tree, element)
+
+        request_xml = ET.tostring(tree.getroot())
+        buffer_size = 1024*1024
+        s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        s.settimeout(int(timeout))
+        s.connect((self.server,self.port))
+        log= logging.getLogger( "SomeTest.testSomething" )
+        log.debug( "send data %s", request_xml )
+        s.send(request_xml)
+        data = s.recv(buffer_size)
+        log.debug( "recv data %s", data )
+
+        global storage
+        global mutex
+        try:
+            mutex.acquire()
+            storage[self.data_name] = data 
+        finally:
+            mutex.release()
+
 
 class ServiceRequestHandler :
 
@@ -302,12 +363,9 @@ class DynamicClassBase(unittest.TestCase):
         string_test_id,found_value = self.get_value(data_name,wait_for_value,description)
         
         response_root = ET.fromstring(found_value)
-        data_type, value = expected.split(':')
-        if data_type=='path':
-            file_path = value
-            if not os.path.isabs(file_path) :
-                file_path = os.path.abspath(file_path)
-            expected_root = ET.fromstring(open(file_path).read())
+
+        expected_value = get_value(expected)
+        expected_root = ET.fromstring(expected_value)
 
         response_it = response_root.iter()
         expected_it = expected_root.iter()
@@ -331,13 +389,8 @@ class DynamicClassBase(unittest.TestCase):
         string_test_id,found_value = self.get_value(data_name,wait_for_value,description)
 
         response_json = json.loads(found_value)
-        data_type, expected_value = expected.split(':')
-        if data_type=='path':
-            file_path = expected_value
-            if not os.path.isabs(file_path) :
-                file_path = os.path.abspath(file_path)
-            file_content = open(file_path).read() 
-            expected_json = json.loads(file_content)
+        expected_value = get_value(expected)
+        expected_json = json.loads(expected_value)
         success,error_message = compare_dict(expected_json,response_json)
         self.assertTrue(success, 'JSON comparison failed {0}. {1}'.format(error_message, string_test_id))
 
@@ -345,12 +398,12 @@ class DynamicClassBase(unittest.TestCase):
         string_test_id,found_value = self.get_value(data_name+'_headers',wait_for_value,description)
 
         header_value = found_value[header]
-        self.assertEquals(header_value,expected, '{1} != {2}. Assert {0}'.format(string_test_id,header_value,expected))
+        self.assertEquals(header_value,get_value(expected), '{1} != {2}. Assert {0}'.format(string_test_id,header_value,get_value(expected)))
 
     def assertStatusCodeEqual(self,data_name,expected,description=None, wait_for_value = 0):
         string_test_id,found_value = self.get_value(data_name+'_status_code',wait_for_value,description)
 
-        self.assertEquals(found_value,int(expected), '{1} != {2}. Assert  {0}'.format(string_test_id,found_value,int(expected)))
+        self.assertEquals(found_value,int(get_value(expected)), '{1} != {2}. Assert  {0}'.format(string_test_id,found_value,int(get_value(expected))))
 
     def assertHasElement(self,data_name,xpath,expected=None,description=None, wait_for_value = 0):
         string_test_id,found_value = self.get_value(data_name,wait_for_value,description)
@@ -359,7 +412,7 @@ class DynamicClassBase(unittest.TestCase):
         element = response_root.find(xpath)
         self.assertFalse(element is None, 'Element {1} not found. Assert  {0}'.format(string_test_id,xpath))
         if expected is not None :
-            self.assertEqual(element.tag, expected , '{1} != {2}. Assert  {0}'.format(string_test_id,element.tag,expected))
+            self.assertEqual(element.tag, get_value(expected) , '{1} != {2}. Assert  {0}'.format(string_test_id,element.tag,get_value(expected)))
 
     def assertElementValueEqual(self,data_name,xpath,expected,description=None, wait_for_value = 0):
         string_test_id,found_value = self.get_value(data_name,wait_for_value,description)
@@ -367,6 +420,7 @@ class DynamicClassBase(unittest.TestCase):
         response_root = ET.fromstring(found_value)
         element = response_root.find(xpath)
         self.assertFalse(element is None, 'Element {1} not found. Assert  {0}'.format(string_test_id,xpath))
+        expected = get_value(expected)
         self.assertEqual(element.text, expected , '{1} != {2}. Assert  {0}'.format(string_test_id,element.text,expected))
 
     def assertAttributeValueEqual(self,data_name,xpath,attribute,expected,description=None, wait_for_value = 0):
@@ -376,6 +430,7 @@ class DynamicClassBase(unittest.TestCase):
         element = response_root.find(xpath)
         self.assertFalse(element is None, 'Element {1} not found. Assert  {0}'.format(string_test_id,xpath))
         self.assertTrue(attribute in element.attrib, 'Attribute {1} not found in element {2}. Assert  {0}'.format(string_test_id,attribute, xpath))
+        expected = get_value(expected)
         self.assertEqual(element.attrib[attribute], expected , '{1} != {2}. Assert  {0}'.format(string_test_id,element.attrib[attribute],expected))
         
 mutex = threading.Lock()
@@ -385,6 +440,7 @@ commands={}
 commands['start_host'] = lambda x,y: StartHostHandler(**y.attrib).run()
 commands['stop_host'] = lambda x,y: StopHostHandler(**y.attrib).run()
 commands['service_request'] = lambda x,y: ServiceRequestHandler(y,**y.attrib).run()
+commands['raw_request'] = lambda x,y: RawRequestHandler(y,**y.attrib).run()
 commands['host_request'] = lambda x,y: HostRequestHandler(**y.attrib).run()
 commands['description'] = lambda x,y: None
 commands['wait_for_response'] = lambda x,y: wait_for_value(**y.attrib)
@@ -417,6 +473,8 @@ def make_check_test(xml_path):
             iterator.next()
             for element in iterator :
                 if element.tag in commands :
+                    log= logging.getLogger( "SomeTest.testSomething" )
+                    log.debug( "run command %s", element.tag )
                     commands[element.tag](self, element)
         finally:
             cleanup_root = tree.getroot().find('cleanup')
@@ -526,6 +584,9 @@ test_names = []
 host_storage = {}
 
 def load_tests(loader, tests, pattern):
+    logging.basicConfig( stream=sys.stderr )
+    log= logging.getLogger( "SomeTest.testSomething" ).setLevel( logging.DEBUG )
+    log.debug( "begin logging %s", test_folder )
     global test_folder
     test_folder = os.path.abspath(test_folder)
     sub_dirs = get_subdirectories(test_folder)
