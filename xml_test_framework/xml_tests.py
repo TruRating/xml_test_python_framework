@@ -20,6 +20,7 @@ import ConfigParser
 import uuid
 import fnmatch
 import logging
+import sys
 
 def updateSessionId() :
     config = ConfigParser.ConfigParser()
@@ -155,7 +156,7 @@ class AlterAttributeHandler :
 
 class RawRequestHandler :
 
-    def __init__(self,element_node, path, timeout = 10, data_name='default',server="localhost",port="57777"):
+    def __init__(self,element_node, path, timeout = 10, data_name='default',server="localhost",port="9618"):
         self.element_node = element_node
         if not os.path.isabs(path) :
             self.path = os.path.abspath(path)
@@ -178,11 +179,11 @@ class RawRequestHandler :
         for element in iterator :
             xml_editors[element.tag](tree, element)
 
-        request_xml = ET.tostring(tree.getroot())
+        request_xml = """<?xml version="1.0"?>{0}""".format(ET.tostring(tree.getroot()))
         buffer_size = 1024*1024
         s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        s.settimeout(int(timeout))
-        s.connect((self.server,self.port))
+        s.settimeout(int(self.timeout))
+        s.connect((self.server,int(self.port)))
         log= logging.getLogger( "SomeTest.testSomething" )
         log.debug( "send data %s", request_xml )
         s.send(request_xml)
@@ -585,9 +586,10 @@ host_storage = {}
 
 def load_tests(loader, tests, pattern):
     logging.basicConfig( stream=sys.stderr )
-    log= logging.getLogger( "SomeTest.testSomething" ).setLevel( logging.DEBUG )
-    log.debug( "begin logging %s", test_folder )
+    log= logging.getLogger( "SomeTest.testSomething" )
+    log.setLevel( logging.DEBUG )
     global test_folder
+    log.debug( "begin logging %s", test_folder )
     test_folder = os.path.abspath(test_folder)
     sub_dirs = get_subdirectories(test_folder)
     allTests = unittest.TestSuite()
